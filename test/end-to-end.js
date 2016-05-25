@@ -28,23 +28,56 @@ const mochaUtils = SWTestingHelpers.mochaUtils;
 const seleniumFirefox = require('selenium-webdriver/firefox');
 const exec = require('child_process').exec;
 
+const chromeOptions = require('selenium-webdriver/chrome');
+const webdriver = require('selenium-webdriver');
+const sauceConnectLauncher = require('sauce-connect-launcher');
+
 describe('Test simple-push-demo', function() {
   // Browser tests can be slow
   this.timeout(60000);
 
+  const saucelabsUsername = process.env.SAUCELABS_USERNAME;
+  const saucelabsAPIKey = process.env.SAUCELABS_APIKEY;
+  const saucelabsPort = 55001;
+  const saucelabsTunnel = 'simple-push-demo-tunnel';
+
   let testServer;
   let testServerURL;
+  let sauceTunnel;
 
   before(function() {
     testServer = new TestServer();
-    return testServer.startServer(path.join(__dirname, '..'))
+    return testServer.startServer(path.join(__dirname, '..'), saucelabsPort)
     .then(portNumber => {
       testServerURL = `http://localhost:${portNumber}`;
+    })
+    .then(() => {
+      return new Promise(resolve => {
+        sauceConnectLauncher({
+          username: saucelabsUsername,
+          accessKey: saucelabsAPIKey,
+          tunnelIdentifier: saucelabsTunnel
+        }, (err, sauceConnectProcess) => {
+          if (err) {
+            throw err;
+          }
+
+          sauceTunnel = sauceConnectProcess;
+          resolve();
+        });
+      });
     });
   });
 
   after(function() {
     testServer.killServer();
+
+    return new Promise(resolve => {
+      sauceTunnel.close(() => {
+        sauceTunnel = null;
+        resolve();
+      });
+    });
   });
 
   const queueUnitTest = browserInfo => {
@@ -54,6 +87,7 @@ describe('Test simple-push-demo', function() {
       // Null allows afterEach a safe way to skip quiting the driver
       let globalDriverReference = null;
       const PAYLOAD_TEST = 'Hello, world!';
+      let testId = 0;
 
       beforeEach(function() {
         // Enable Notifications
@@ -79,7 +113,9 @@ describe('Test simple-push-demo', function() {
           /* eslint-enable camelcase */
         }
 
-        globalDriverReference = browserInfo.getSeleniumDriver();
+        globalDriverReference = browserInfo.getSeleniumDriver('#' + testId);
+
+        testId++;
       });
 
       afterEach(function() {
@@ -456,7 +492,7 @@ describe('Test simple-push-demo', function() {
     });
   };
 
-  const automatedBrowsers = automatedBrowserTesting.getDiscoverableBrowsers();
+  /** const automatedBrowsers = automatedBrowserTesting.getDiscoverableBrowsers();
   automatedBrowsers.forEach(browserInfo => {
     if (browserInfo.getSeleniumBrowserId() === 'firefox' &&
       browserInfo.getReleaseName() === 'beta') {
@@ -466,5 +502,29 @@ describe('Test simple-push-demo', function() {
     }
 
     queueUnitTest(browserInfo);
+  });**/
+  const options = new chromeOptions.Options();
+  queueUnitTest({
+    getPrettyName: () => 'SauceLabs',
+    getSeleniumBrowserId: () => 'chrome',
+    getSeleniumOptions: () => options,
+    getSeleniumDriver: testId => {
+      return new webdriver.Builder()
+      .setFirefoxOptions(options)
+      .setChromeOptions(options)
+      .withCapabilities({
+        browserName: 'chrome',
+        platform: 'Windows 10',
+        version: 'stable',
+        name: '[Unit Test - simple-push-demo] ' + testId,
+        username: saucelabsUsername,
+        accessKey: saucelabsAPIKey,
+        tunnelIdentifier: saucelabsTunnel
+      })
+      .usingServer('http://' + saucelabsUsername + ':' +
+        saucelabsAPIKey +
+        '@ondemand.saucelabs.com:80/wd/hub')
+      .build();
+    }
   });
 });
