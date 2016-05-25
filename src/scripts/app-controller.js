@@ -12,6 +12,7 @@ export default class AppController {
     // This div contains the UI for CURL commands to trigger a push
     this._sendPushOptions = document.querySelector('.js-send-push-options');
     this._payloadTextField = document.querySelector('.js-payload-textfield');
+    console.log(this._payloadTextField);
     this._stateMsg = document.querySelector('.js-state-msg');
     this._payloadTextField.oninput = () => {
       Promise.all([
@@ -311,6 +312,13 @@ export default class AppController {
     console.log('Sending XHR to Web Push Protocol endpoint');
     const headers = new Headers();
     headers.append('TTL', 60);
+
+    EncryptionHelperFactory.generateHelper()
+    .then(encryptionHelper => {
+      console.log(JSON.stringify(subscription));
+      return encryptionHelper.encryptMessage(
+        JSON.parse(JSON.stringify(subscription)), payloadText);
+    });
 
     const fetchOptions = {
       method: 'post',
