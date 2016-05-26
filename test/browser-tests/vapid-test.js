@@ -10,7 +10,8 @@ describe('Test VAPID', function() {
   };
 
   const VALID_OUTPUT = {
-    tokenHeader: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.',
+    expiration: 1464326106,
+    unsignedToken: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJhdWQiOiJodHRwczovL2ZjbS5nb29nbGVhcGlzLmNvbSIsImV4cCI6MTQ2NDMyNjEwNiwic3ViIjoibWFpbHRvOnBldGVyQGx2cC1tZWRpYS5jb20ifQ',
     p256ecdsa: 'BG3OGHrl3YJ5PHpl0GSqtAAlUPnx1LvwQvFMIc68vhJU6nIkRzPEqtCduQz8wQj0r71NVPzr7ZRk2f-fhsQ5pK8'
   };
 
@@ -44,6 +45,7 @@ describe('Test VAPID', function() {
   it('should accept valid input VAPID certificates', function() {
     const factory = window.gauntface.EncryptionHelperFactory;
     const EncryptionHelper = window.gauntface.EncryptionHelper;
+
     return factory.importKeys(VALID_VAPID_KEYS)
     .then(keys => {
       return factory.generateHelper({
@@ -76,9 +78,6 @@ describe('Test VAPID', function() {
     const factory = window.gauntface.EncryptionHelperFactory;
     return factory.generateVapidKeys()
     .then(keys => {
-      const EncryptionHelper = window.gauntface.EncryptionHelper;
-      console.log(EncryptionHelper.uint8ArrayToBase64Url(keys.publicKey));
-      console.log(EncryptionHelper.uint8ArrayToBase64Url(keys.privateKey));
       return factory.createVapidAuthHeader(keys, 'http://localhost', 'mailto:simple-push-demo@gauntface.co.uk');
     })
     .then(authHeaders => {
@@ -97,15 +96,15 @@ describe('Test VAPID', function() {
     return factory.createVapidAuthHeader({
       publicKey: EncryptionHelper.base64UrlToUint8Array(VALID_VAPID_KEYS.publicKey),
       privateKey: EncryptionHelper.base64UrlToUint8Array(VALID_VAPID_KEYS.privateKey)
-    }, 'http://localhost', 'mailto:simple-push-demo@gauntface.co.uk')
+    }, 'https://fcm.googleapis.com', 'mailto:peter@lvp-media.com', VALID_OUTPUT.expiration)
     .then(authHeaders => {
+      console.log(authHeaders.bearer);
       (authHeaders instanceof Object).should.equal(true);
       (typeof authHeaders.bearer === 'string').should.equal(true);
       (typeof authHeaders.p256ecdsa === 'string').should.equal(true);
 
-      const bearerMatchIndex = authHeaders.bearer.indexOf(VALID_OUTPUT.tokenHeader);
-      bearerMatchIndex.should.equal(0);
       authHeaders.p256ecdsa.should.equal(VALID_OUTPUT.p256ecdsa);
+      authHeaders.bearer.indexOf(VALID_OUTPUT.unsignedToken).should.equal(0);
     });
   });
 });

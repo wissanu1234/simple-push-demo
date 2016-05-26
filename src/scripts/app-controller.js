@@ -187,7 +187,7 @@ export default class AppController {
     }
 
     const vapidPromise = EncryptionHelperFactory.createVapidAuthHeader(
-      this._applicationKeys, 'http://localhost',
+      this._applicationKeys, this._currentSubscription.endpoint,
       'mailto:simple-push-demo@gauntface.co.uk');
 
     return Promise.all([
@@ -195,10 +195,6 @@ export default class AppController {
       vapidPromise
     ])
     .then(results => {
-
-    });
-
-    return payloadPromise.then(encryptedPayload => {
       const curlContainer = document.querySelector('.js-curl-container');
       let curlCommand;
 
@@ -206,20 +202,20 @@ export default class AppController {
       if (this._currentSubscription.endpoint.indexOf(
         'https://android.googleapis.com/gcm/send') === 0) {
         curlCommand = this.produceGCMProprietaryCURLCommand(
-          this._currentSubscription, encryptedPayload);
+          this._currentSubscription, results[0]);
 
       // Web Push Protocol
-      } else if (payloadText && payloadText.trim().length > 0) {
+      /** } else if (payloadText && payloadText.trim().length > 0) {
         // Turn off curl command
         curlContainer.style.display = 'none';
         this._stateMsg.textContent = 'Note: Push messages with a payload ' +
           'can\'t be sent with a cURL command due to the body of the web ' +
           'push protocol request being a stream.';
-        return;
+        return;**/
       } else {
         this._stateMsg.textContent = '';
         curlCommand = this.produceWebPushProtocolCURLCommand(
-          this._currentSubscription, encryptedPayload);
+          this._currentSubscription, results[0], results[1]);
       }
 
       curlContainer.style.display = 'block';
@@ -417,7 +413,17 @@ export default class AppController {
     return curlCommand;
   }
 
-  produceWebPushProtocolCURLCommand(subscription, vapidHeaders) {
+  produceWebPushProtocolCURLCommand(subscription,
+    encryptedPayload, vapidHeaders) {
+    if (encryptedPayload) {
+      console.log(encryptedPayload);
+
+      let hexString = '';
+      new Uint8Array(encryptedPayload.cipherText).forEach(item => {
+        hexString += '\\0x' + item.toString(16);
+      });
+      console.log('Hello: ', hexString);
+    }
     // Payload body is a byte array so can't add to cURL command
     let additionalHeaders = '';
     if (vapidHeaders) {
