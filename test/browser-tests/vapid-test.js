@@ -10,7 +10,7 @@ describe('Test VAPID', function() {
   };
 
   const VALID_OUTPUT = {
-    bearer: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJhdWQiOiJodHRwOi8vbG9jYWxob3N0Ojg4ODgiLCJleHAiOjE0NjQyMjc5NzEsInN1YiI6Im1haWx0bzpzaW1wbGUtcHVzaC1kZW1vQGdhdW50ZmFjZS5jby51ayJ9.R2MxJucajo5LmAd4Duw3v2pWloIlHqztjnQPgF0kiDVtsi_b0ACx-ivS4CxA28roPpGmUlCMCkcwHLdB6IoC_w',
+    tokenHeader: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.',
     p256ecdsa: 'BG3OGHrl3YJ5PHpl0GSqtAAlUPnx1LvwQvFMIc68vhJU6nIkRzPEqtCduQz8wQj0r71NVPzr7ZRk2f-fhsQ5pK8'
   };
 
@@ -44,10 +44,10 @@ describe('Test VAPID', function() {
   it('should accept valid input VAPID certificates', function() {
     const factory = window.gauntface.EncryptionHelperFactory;
     const EncryptionHelper = window.gauntface.EncryptionHelper;
-    return EncryptionHelper.importKeys(VALID_VAPID_KEYS)
+    return factory.importKeys(VALID_VAPID_KEYS)
     .then(keys => {
       return factory.generateHelper({
-        vapidKeys:
+        vapidKeys: keys
       });
     })
     .then(testEncryption => {
@@ -76,12 +76,10 @@ describe('Test VAPID', function() {
     const factory = window.gauntface.EncryptionHelperFactory;
     return factory.generateVapidKeys()
     .then(keys => {
-      return factory.generateHelper({
-        vapidKeys: keys
-      });
-    })
-    .then(testEncryption => {
-      return testEncryption.createVapidAuthHeader('http://localhost', 'mailto:simple-push-demo@gauntface.co.uk');
+      const EncryptionHelper = window.gauntface.EncryptionHelper;
+      console.log(EncryptionHelper.uint8ArrayToBase64Url(keys.publicKey));
+      console.log(EncryptionHelper.uint8ArrayToBase64Url(keys.privateKey));
+      return factory.createVapidAuthHeader(keys, 'http://localhost', 'mailto:simple-push-demo@gauntface.co.uk');
     })
     .then(authHeaders => {
       (authHeaders instanceof Object).should.equal(true);
@@ -95,18 +93,18 @@ describe('Test VAPID', function() {
 
   it('should generate specific VAPID authentication headers', () => {
     const factory = window.gauntface.EncryptionHelperFactory;
-    return factory.generateHelper({
-      vapidKeys: VALID_VAPID_KEYS
-    })
-    .then(testEncryption => {
-      return testEncryption.createVapidAuthHeader('http://localhost:8888', 'mailto:simple-push-demo@gauntface.co.uk', 1464228574);
-    })
+    const EncryptionHelper = window.gauntface.EncryptionHelper;
+    return factory.createVapidAuthHeader({
+      publicKey: EncryptionHelper.base64UrlToUint8Array(VALID_VAPID_KEYS.publicKey),
+      privateKey: EncryptionHelper.base64UrlToUint8Array(VALID_VAPID_KEYS.privateKey)
+    }, 'http://localhost', 'mailto:simple-push-demo@gauntface.co.uk')
     .then(authHeaders => {
       (authHeaders instanceof Object).should.equal(true);
       (typeof authHeaders.bearer === 'string').should.equal(true);
       (typeof authHeaders.p256ecdsa === 'string').should.equal(true);
 
-      authHeaders.bearer.indexOf('eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJhdWQiOiJodHRwOi8vbG9jYWxob3N0Ojg4ODgiLCJleHAiOjE0NjQyMjg1NzQsInN1YiI6Im1haWx0bzpzaW1wbGUtcHVzaC1kZW1vQGdhdW50ZmFjZS5jby51ayJ9').should.equal(0);
+      const bearerMatchIndex = authHeaders.bearer.indexOf(VALID_OUTPUT.tokenHeader);
+      bearerMatchIndex.should.equal(0);
       authHeaders.p256ecdsa.should.equal(VALID_OUTPUT.p256ecdsa);
     });
   });

@@ -35,7 +35,7 @@ const joinUnit8Arrays = allUint8Arrays => {
   }, new Uint8Array());
 };
 
-export default class EncryptionHelper {
+export class EncryptionHelper {
   constructor(serverKeys, salt, vapidKeys) {
     if (!serverKeys || !serverKeys.publicKey || !serverKeys.privateKey) {
       throw new Error('Bad server keys. Use ' +

@@ -4,9 +4,11 @@
 
 export default class PushClient {
 
-  constructor(stateChangeCb, subscriptionUpdate) {
+  constructor(stateChangeCb, subscriptionUpdate, publicAppKey) {
     this._stateChangeCb = stateChangeCb;
     this._subscriptionUpdate = subscriptionUpdate;
+
+    this._publicApplicationKey = publicAppKey;
 
     this._state = {
       UNSUPPORTED: {
@@ -75,7 +77,8 @@ export default class PushClient {
       return;
     }
 
-    navigator.serviceWorker.ready.then(() => {
+    navigator.serviceWorker.ready
+    .then(() => {
       this._stateChangeCb(this._state.INITIALISING);
       this.setUpPushPermission();
     });
@@ -132,11 +135,17 @@ export default class PushClient {
     // We need the service worker registration to access the push manager
     navigator.serviceWorker.ready
     .then(serviceWorkerRegistration => {
+      let publicServerKey = new Uint8Array(65);
+      publicServerKey[0] = 0x04;
       return serviceWorkerRegistration.pushManager.subscribe(
-        {userVisibleOnly: true}
+        {
+          userVisibleOnly: true,
+          applicationServerKey: this._publicApplicationKey
+        }
       );
     })
     .then(subscription => {
+      console.log(subscription);
       this._stateChangeCb(this._state.SUBSCRIBED);
       this._subscriptionUpdate(subscription);
     })

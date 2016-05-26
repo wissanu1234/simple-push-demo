@@ -1,13 +1,22 @@
 /* eslint-env browser */
 
 import PushClient from './push-client.js';
-import EncryptionHelperFactory from './encryption/encryption-helper';
+import EncryptionHelperFactory, {EncryptionHelper}
+  from './encryption/encryption-helper';
 
 export default class AppController {
   constructor() {
     // Define a different server URL here if desire.
     this._PUSH_SERVER_URL = '';
     this._API_KEY = 'AIzaSyBBh4ddPa96rQQNxqiq_qQj7sq1JdsNQUQ';
+
+    this._applicationKeys = {
+      publicKey: EncryptionHelper.base64UrlToUint8Array(
+        'BDd3_hVL9fZi9Ybo2UUzA284WG5FZR30_95YeZJsiA' +
+        'pwXKpNcF1rRPF3foIiBHXRdJI2Qhumhf6_LFTeZaNndIo'),
+      privateKey: EncryptionHelper.base64UrlToUint8Array(
+        'xKZKYRNdFFn8iQIF2MH54KTfUHwH105zBdzMR7SI3xI')
+    };
 
     // This div contains the UI for CURL commands to trigger a push
     this._sendPushOptions = document.querySelector('.js-send-push-options');
@@ -54,7 +63,8 @@ export default class AppController {
     this._toggleSwitch = toggleSwitch;
     this._pushClient = new PushClient(
       this._stateChangeListener,
-      this._subscriptionUpdate
+      this._subscriptionUpdate,
+      this._applicationKeys.publicKey
     );
 
     document.querySelector('.js-push-toggle-switch > input')
@@ -176,6 +186,18 @@ export default class AppController {
       });
     }
 
+    const vapidPromise = EncryptionHelperFactory.createVapidAuthHeader(
+      this._applicationKeys, 'http://localhost',
+      'mailto:simple-push-demo@gauntface.co.uk');
+
+    return Promise.all([
+      payloadPromise,
+      vapidPromise
+    ])
+    .then(results => {
+
+    });
+
     return payloadPromise.then(encryptedPayload => {
       const curlContainer = document.querySelector('.js-curl-container');
       let curlCommand;
@@ -241,11 +263,9 @@ export default class AppController {
       });
     }
 
-    const vapidPromise = EncryptionHelperFactory.generateVapidKeys()
-    .then(vapidKeys => {
-      return EncryptionHelperFactory.createVapidAuthHeader(vapidKeys,
-        'http://localhost', 'mailto:simple-push-demo@gauntface.co.uk');
-    });
+    const vapidPromise = EncryptionHelperFactory.createVapidAuthHeader(
+      this._applicationKeys, 'http://localhost',
+      'mailto:simple-push-demo@gauntface.co.uk');
 
     Promise.all([
       payloadPromise,
@@ -335,6 +355,8 @@ export default class AppController {
         encryptedPayload.publicServerKey);
       headers.append('Content-Encoding', 'application/octet-stream');
       headers.append('Content-Encoding', 'aesgcm');
+    } else {
+      headers.append('Content-Length', 0);
     }
 
     if (vapidHeaders) {
@@ -395,11 +417,20 @@ export default class AppController {
     return curlCommand;
   }
 
-  produceWebPushProtocolCURLCommand(subscription) {
+  produceWebPushProtocolCURLCommand(subscription, vapidHeaders) {
     // Payload body is a byte array so can't add to cURL command
+    let additionalHeaders = '';
+    if (vapidHeaders) {
+      additionalHeaders += ` --header "Authorization: Bearer ` +
+        `${vapidHeaders.bearer}"`;
+
+      additionalHeaders += ` --header "Crypto-Key: p256ecdsa=` +
+        `${vapidHeaders.p256ecdsa}"`;
+    }
     const curlEndpoint = subscription.endpoint;
-    const curlCommand = 'curl --header "TTL: 60" --request POST ' +
-      curlEndpoint;
+    const curlCommand = 'curl --header "TTL: 60" ' +
+      '--header "Content-Length: 0"' + additionalHeaders +
+      ' --request POST ' + curlEndpoint;
     return curlCommand;
   }
 
