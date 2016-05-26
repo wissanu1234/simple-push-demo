@@ -12,7 +12,6 @@ export default class AppController {
     // This div contains the UI for CURL commands to trigger a push
     this._sendPushOptions = document.querySelector('.js-send-push-options');
     this._payloadTextField = document.querySelector('.js-payload-textfield');
-    console.log(this._payloadTextField);
     this._stateMsg = document.querySelector('.js-state-msg');
     this._payloadTextField.oninput = () => {
       Promise.all([
@@ -237,18 +236,27 @@ export default class AppController {
     if (payloadText && payloadText.trim().length > 0) {
       payloadPromise = EncryptionHelperFactory.generateHelper()
       .then(encryptionHelper => {
-        console.log(JSON.stringify(subscription));
         return encryptionHelper.encryptMessage(
           JSON.parse(JSON.stringify(subscription)), payloadText);
       });
     }
 
-    payloadPromise.then(encryptedPayload => {
+    const vapidPromise = EncryptionHelperFactory.generateVapidKeys()
+    .then(vapidKeys => {
+      return EncryptionHelperFactory.createVapidAuthHeader(vapidKeys,
+        'http://localhost', 'mailto:simple-push-demo@gauntface.co.uk');
+    });
+
+    Promise.all([
+      payloadPromise,
+      vapidPromise
+    ])
+    .then(results => {
       if (subscription.endpoint.indexOf(
         'https://android.googleapis.com/gcm/send') === 0) {
-        this.useGCMProtocol(subscription, encryptedPayload);
+        this.useGCMProtocol(subscription, results[0]);
       } else {
-        this.useWebPushProtocol(subscription, encryptedPayload);
+        this.useWebPushProtocol(subscription, results[0], results[1]);
       }
     });
   }
@@ -308,17 +316,10 @@ export default class AppController {
     });
   }
 
-  useWebPushProtocol(subscription, encryptedPayload) {
+  useWebPushProtocol(subscription, encryptedPayload, vapidHeaders) {
     console.log('Sending XHR to Web Push Protocol endpoint');
     const headers = new Headers();
     headers.append('TTL', 60);
-
-    EncryptionHelperFactory.generateHelper()
-    .then(encryptionHelper => {
-      console.log(JSON.stringify(subscription));
-      return encryptionHelper.encryptMessage(
-        JSON.parse(JSON.stringify(subscription)), payloadText);
-    });
 
     const fetchOptions = {
       method: 'post',
@@ -334,6 +335,18 @@ export default class AppController {
         encryptedPayload.publicServerKey);
       headers.append('Content-Encoding', 'application/octet-stream');
       headers.append('Content-Encoding', 'aesgcm');
+    }
+
+    if (vapidHeaders) {
+      headers.append('Authorization', 'Bearer ' + vapidHeaders.bearer);
+
+      let cryptoKey = headers.get('Crypto-Key');
+      if (cryptoKey) {
+        cryptoKey += '; p256ecdsa=' + vapidHeaders.p256ecdsa;
+      } else {
+        cryptoKey = 'p256ecdsa=' + vapidHeaders.p256ecdsa;
+      }
+      headers.set('Crypto-Key', cryptoKey);
     }
 
     fetch(subscription.endpoint, fetchOptions)

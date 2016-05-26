@@ -229,87 +229,6 @@ export default class EncryptionHelper {
     });
   }
 
-  createVapidAuthHeader(audience, subject, exp) {
-    if (!audience) {
-      return Promise.reject(new Error('Audience must be the origin of the ' +
-        'server'));
-    }
-
-    if (!subject) {
-      return Promise.reject(new Error('Subject must be either a mailto or ' +
-        'http link'));
-    }
-
-    if (typeof exp !== 'number') {
-      // The `exp` field will contain the current timestamp in UTC plus twelve hours.
-      exp = Math.floor((Date.now() / 1000) + 12 * 60 * 60);
-    }
-
-    const tokenHeader = {
-      typ: 'JWT',
-      alg: 'ES256'
-    };
-
-    const tokenBody = {
-      aud: audience,
-      exp: exp,
-      sub: subject
-    };
-
-    // Utility function for UTF-8 encoding a string to an ArrayBuffer.
-    const utf8Encoder = new TextEncoder('utf-8');
-
-    // The unsigned token is the concatenation of the URL-safe base64 encoded header and body.
-    const unsignedToken =
-      EncryptionHelper.uint8ArrayToBase64Url(
-        utf8Encoder.encode(JSON.stringify(tokenHeader))
-      ) + '.' + EncryptionHelper.uint8ArrayToBase64Url(
-        utf8Encoder.encode(JSON.stringify(tokenBody))
-      );
-
-    let vapidKeys = null;
-    return EncryptionHelper.exportCryptoKeys(
-      this.getPublicVapidKey(), this.getPrivateVapidKey())
-    .then(vk => {
-      vapidKeys = vk;
-
-      // Sign the |unsignedToken| using ES256 (SHA-256 over ECDSA).
-      const key = {
-        kty: 'EC',
-        crv: 'P-256',
-        x: EncryptionHelper.uint8ArrayToBase64Url(
-          vapidKeys.publicKey.slice(1, 33)),
-        y: EncryptionHelper.uint8ArrayToBase64Url(
-          vapidKeys.publicKey.slice(33, 65)),
-        d: EncryptionHelper.uint8ArrayToBase64Url(vapidKeys.privateKey)
-      };
-
-      // Sign the |unsignedToken| with the server's private key to generate the signature.
-      return crypto.subtle.importKey('jwk', key, {
-        name: 'ECDSA', namedCurve: 'P-256'
-      }, true, ['sign']);
-    })
-    .then(key => {
-      return crypto.subtle.sign({
-        name: 'ECDSA',
-        hash: {
-          name: 'SHA-256'
-        }
-      }, key, utf8Encoder.encode(unsignedToken));
-    })
-    .then(signature => {
-      const jsonWebToken = unsignedToken + '.' +
-        EncryptionHelper.uint8ArrayToBase64Url(new Uint8Array(signature));
-      const p256ecdsa = EncryptionHelper.uint8ArrayToBase64Url(
-        vapidKeys.publicKey);
-
-      return {
-        bearer: jsonWebToken,
-        p256ecdsa: p256ecdsa
-      };
-    });
-  }
-
   encryptMessage(subscription, payload) {
     return this.generateEncryptionKeys(subscription)
     .then(encryptionKeys => {
@@ -541,7 +460,88 @@ export default class EncryptionHelperFactory {
 
   static generateVapidKeys() {
     return crypto.subtle.generateKey({name: 'ECDH', namedCurve: 'P-256'},
-      true, ['deriveBits']);
+      true, ['deriveBits'])
+      .then(keys => {
+        return EncryptionHelper.exportCryptoKeys(
+          keys.publicKey, keys.privateKey);
+      });
+  }
+
+  static createVapidAuthHeader(vapidKeys, audience, subject, exp) {
+    if (!audience) {
+      return Promise.reject(new Error('Audience must be the origin of the ' +
+        'server'));
+    }
+
+    if (!subject) {
+      return Promise.reject(new Error('Subject must be either a mailto or ' +
+        'http link'));
+    }
+
+    if (typeof exp !== 'number') {
+      // The `exp` field will contain the current timestamp in UTC plus twelve hours.
+      exp = Math.floor((Date.now() / 1000) + 12 * 60 * 60);
+    }
+
+    // Ensure the audience is just the origin
+    audience = new URL(audience).origin;
+
+    const tokenHeader = {
+      typ: 'JWT',
+      alg: 'ES256'
+    };
+
+    const tokenBody = {
+      aud: audience,
+      exp: exp,
+      sub: subject
+    };
+
+    // Utility function for UTF-8 encoding a string to an ArrayBuffer.
+    const utf8Encoder = new TextEncoder('utf-8');
+
+    // The unsigned token is the concatenation of the URL-safe base64 encoded header and body.
+    const unsignedToken =
+      EncryptionHelper.uint8ArrayToBase64Url(
+        utf8Encoder.encode(JSON.stringify(tokenHeader))
+      ) + '.' + EncryptionHelper.uint8ArrayToBase64Url(
+        utf8Encoder.encode(JSON.stringify(tokenBody))
+      );
+
+    // Sign the |unsignedToken| using ES256 (SHA-256 over ECDSA).
+    const key = {
+      kty: 'EC',
+      crv: 'P-256',
+      x: EncryptionHelper.uint8ArrayToBase64Url(
+        vapidKeys.publicKey.slice(1, 33)),
+      y: EncryptionHelper.uint8ArrayToBase64Url(
+        vapidKeys.publicKey.slice(33, 65)),
+      d: EncryptionHelper.uint8ArrayToBase64Url(vapidKeys.privateKey)
+    };
+
+      // Sign the |unsignedToken| with the server's private key to generate the signature.
+    return crypto.subtle.importKey('jwk', key, {
+      name: 'ECDSA', namedCurve: 'P-256'
+    }, true, ['sign'])
+    .then(key => {
+      return crypto.subtle.sign({
+        name: 'ECDSA',
+        hash: {
+          name: 'SHA-256'
+        }
+      }, key, utf8Encoder.encode(unsignedToken));
+    })
+    .then(signature => {
+      const jsonWebToken = unsignedToken + '.' +
+        EncryptionHelper.uint8ArrayToBase64Url(new Uint8Array(signature));
+      const p256ecdsa = EncryptionHelper.uint8ArrayToBase64Url(
+        vapidKeys.publicKey);
+
+      return {
+        bearer: jsonWebToken,
+        p256ecdsa: p256ecdsa
+      };
+    });
   }
 
   static generateSalt() {
