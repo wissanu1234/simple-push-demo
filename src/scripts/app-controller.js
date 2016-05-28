@@ -140,7 +140,6 @@ export default class AppController {
 
   _subscriptionUpdate(subscription) {
     this._currentSubscription = subscription;
-
     if (!subscription) {
       // Remove any subscription from your servers if you have
       // set it up.
@@ -415,15 +414,7 @@ export default class AppController {
 
   produceWebPushProtocolCURLCommand(subscription,
     encryptedPayload, vapidHeaders) {
-    if (encryptedPayload) {
-      console.log(encryptedPayload);
 
-      let hexString = '';
-      new Uint8Array(encryptedPayload.cipherText).forEach(item => {
-        hexString += '\\0x' + item.toString(16);
-      });
-      console.log('Hello: ', hexString);
-    }
     // Payload body is a byte array so can't add to cURL command
     let additionalHeaders = '';
     if (vapidHeaders) {
